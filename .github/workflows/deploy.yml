@@ -1,0 +1,48 @@
+name: Build and Deploy Demo API to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore ./src/DemoApi/DemoApi.csproj
+
+      - name: Build
+        run: dotnet build ./src/DemoApi/DemoApi.csproj --configuration Release --no-restore
+
+      - name: Publish
+        run: dotnet publish ./src/DemoApi/DemoApi.csproj --configuration Release --output ./publish --no-build
+
+      - name: Copy published files to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "publish/*"
+          target: ${{ secrets.EC2_TARGET_DIR }}
+          strip_components: 1
+
+      - name: Restart Demo API service
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            sudo systemctl restart demoapi
+            sudo systemctl status demoapi --no-pager
